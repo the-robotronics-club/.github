@@ -1,0 +1,60 @@
+name: Update Organization Statistics
+
+on:
+  schedule:
+    # Runs once per day at 00:00 UTC.
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/generate_org_stats.py"
+      - ".github/workflows/update-org-stats.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-org-stats
+  cancel-in-progress: true
+
+jobs:
+  update-stats:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Generate organization statistics
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Override this if the workflow lives in a repo outside the org,
+          # or if you want to target a different organization.
+          ORG_NAME: ${{ github.repository_owner }}
+        run: python scripts/generate_org_stats.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [ -n "$(git status --porcelain assets/generated)" ]; then
+            git add assets/generated
+            git commit -m "chore: automated organization statistics update"
+            git push
+          else
+            echo "No changes to organization statistics. Skipping commit."
+          fi
